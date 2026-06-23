@@ -2,7 +2,7 @@
 
 import confetti from 'canvas-confetti';
 import { AnimatePresence, motion, useScroll, useTransform } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const navItems = [
   { label: 'Home', href: '#home' },
@@ -40,7 +40,12 @@ export default function Home() {
   const [letterOpen, setLetterOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [music, setMusic] = useState(false);
+  const [password, setPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [compliment, setCompliment] = useState(0);
+  const audioRef = useRef<AudioContext | null>(null);
+  const oscillatorRef = useRef<OscillatorNode | null>(null);
+  const gainRef = useRef<GainNode | null>(null);
   const { scrollYProgress } = useScroll();
   const heroY = useTransform(scrollYProgress, [0, 0.35], [0, -120]);
   const floating = useMemo(() => Array.from({ length: 26 }, (_, i) => i), []);
@@ -55,8 +60,61 @@ export default function Home() {
   }
 
   function unlock() {
+    const normalized = password.trim().toLowerCase().replace(/\s+/g, '');
+    const validPasswords = ['aleeya', 'aleeyabalqis', 'balqis'];
+
+    if (!validPasswords.includes(normalized)) {
+      setPasswordError('Password salah sikit. Hint: nama dia 💙');
+      return;
+    }
+
+    setPasswordError('');
     setUnlocked(true);
     fireConfetti(180);
+    startAmbientMusic();
+  }
+
+  function startAmbientMusic() {
+    if (typeof window === 'undefined' || audioRef.current) return;
+
+    const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(220, context.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(330, context.currentTime + 2.4);
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.035, context.currentTime + 1.2);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+
+    audioRef.current = context;
+    oscillatorRef.current = oscillator;
+    gainRef.current = gain;
+    setMusic(true);
+  }
+
+  function toggleMusic() {
+    if (!audioRef.current) {
+      startAmbientMusic();
+      return;
+    }
+
+    const context = audioRef.current;
+    const gain = gainRef.current;
+    if (!gain) return;
+
+    if (music) {
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.4);
+      setMusic(false);
+    } else {
+      gain.gain.exponentialRampToValueAtTime(0.035, context.currentTime + 0.4);
+      setMusic(true);
+    }
   }
 
   return (
@@ -76,8 +134,21 @@ export default function Home() {
               <p className="mb-5 text-sm font-semibold uppercase tracking-[.22em] text-appleBlue">Private friendship website</p>
               <h1 className="text-[clamp(46px,8vw,86px)] font-bold leading-[1.02] tracking-[-.05em]">Untuk Aleeya Balqis sahaja.</h1>
               <p className="mx-auto mt-6 max-w-xl text-xl leading-8 text-white/65">Dibuat oleh Arsyad. Bukan website biasa — ini surprise kecil untuk friendship 2 bulan yang Arsyad hargai.</p>
-              <button onClick={unlock} className="mt-10 rounded-full bg-appleBlue px-8 py-4 text-[17px] font-semibold text-white transition hover:bg-appleBlueDark">Unlock surprise ✨</button>
-              <p className="mt-5 text-xs text-white/35">Hint: tekan button ni, jangan malu.</p>
+              <div className="mx-auto mt-10 max-w-md rounded-[28px] border border-white/10 bg-white/10 p-3 backdrop-blur-2xl">
+                <input
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setPasswordError('');
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && unlock()}
+                  placeholder="Masukkan password"
+                  className="h-14 w-full rounded-full border border-white/15 bg-black/30 px-5 text-center text-[17px] text-white outline-none placeholder:text-white/35 focus:border-appleBlue"
+                />
+                <button onClick={unlock} className="mt-3 w-full rounded-full bg-appleBlue px-8 py-4 text-[17px] font-semibold text-white transition hover:bg-appleBlueDark">Unlock surprise ✨</button>
+              </div>
+              <p className="mt-5 text-xs text-white/40">Hint: password ialah nama dia. Cuba “Aleeya”.</p>
+              {passwordError && <p className="mt-3 text-sm text-red-300">{passwordError}</p>}
             </motion.div>
           </motion.section>
         )}
@@ -90,7 +161,7 @@ export default function Home() {
             {navItems.map((item) => <a key={item.href} href={item.href} className="text-sm text-appleText transition hover:text-appleBlue">{item.label}</a>)}
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => setMusic(!music)} className="hidden rounded-full bg-appleSurface px-4 py-2 text-sm text-appleText md:block">{music ? '♫ Music on' : '♫ Music off'}</button>
+            <button onClick={toggleMusic} className="hidden rounded-full bg-appleSurface px-4 py-2 text-sm text-appleText md:block">{music ? '♫ Music on' : '♫ Music off'}</button>
             <button onClick={() => setMenu(!menu)} className="flex h-11 w-11 items-center justify-center md:hidden" aria-label="Open menu"><span className="text-xl">☰</span></button>
           </div>
         </div>
